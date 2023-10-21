@@ -1,0 +1,21 @@
+[package]
+name = "dbson"
+version = "0.0.1"
+edition = "2021"
+description = "Wrapper type over serde::Serialize and serde::Deserialize for saving bson types to database"
+documentation = "https://docs.rs/dbson"
+repository = "https://github.com/uttarayan21/dbson"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bson = "2.4.0"
+serde = { version = "1", default-features = false }
+
+sqlx = { version = "0.7.2", default-features = false, optional = true }
+rusqlite = { version = "0.29.0", default-features = false, optional = true }
+
+[features]
+rusqlite = ["dep:rusqlite"]
+sqlx = ["dep:sqlx"]
