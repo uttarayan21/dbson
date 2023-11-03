@@ -1,52 +1,67 @@
+//! A BSON wrapper type for any serializable data
+//!
+//! Any type that implements serde::Deserialize && serde::Serialize can be wrapped
+//! and stored inside of a database as a blob.
+//!
+//! This type is useful for storing data that is not easily represented in a relational database.
+//! For example, a HashMap or a Vec of structs.
+//!
+//!
+//!
+//! Currently only supports [rusqlite](https://docs.rs/rusqlite) and [sqlx](https://docs.rs/sqlx)
+//!
+//! It's basically a newtype wrapper over T
+//! So it implements many of the same traits as T
+//! ```rust
+//! // Any serde::Serialize data
+//! let data = vec![1, 2, 3, 4, 5];
+//! // A rusqlite db connection
+//! let conn = rusqlite::Connection::open_in_memory().unwrap();
+//! // Create a table to store the data
+//! conn.execute(
+//!     "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, data BLOB)",
+//!     [],
+//! )
+//! .unwrap();
+//! // Insert the data into the database
+//! conn.execute("INSERT INTO test (data) VALUES (?)", [dbson::DBson::new(data)]).unwrap();
+//! // Query the data back out
+//! let mut stmt = conn.prepare("SELECT data FROM test").unwrap();
+//! let mut rows = stmt.query([]).unwrap();
+//! let row = rows.next().unwrap().unwrap();
+//! let data: dbson::DBson<Vec<u8>> = row.get(0).unwrap();
+//! assert_eq!(data.into_inner(), vec![1, 2, 3, 4, 5]);
+//! ```
+//!
+//! However do note that since the data is just a blob if you insert a hashmap and then try to
+//! query it back out as a vector it will fail.
+
 use serde::{Deserialize, Serialize};
 
-/// A wrapper type for BSON data.
+/// A wrapper type for serializable data.
 ///
 /// Any type that implements serde::Deserialize && serde::Serialize can be wrapped by this type.
 /// and used inside of a database as a blob.
-///
-/// This type is useful for storing data that is not easily represented in a relational database.
-/// For example, a HashMap or a Vec of structs.
-/// Currently only supports rusqlite and sqlx
-///
-/// It's basically a newtype wrapper over T
-/// So it implements many of the same traits as T
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
+#[cfg_attr(feature = "transparent", serde(transparent))]
 #[repr(transparent)]
-pub struct DBson<T>(T);
-
-// impl<'de> Deserialize<'de> for DBson<bson::Document> {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         bson::Document::deserialize(deserializer).map(Self)
-//     }
-// }
-
-// impl Serialize for DBson<bson::Document> {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         self.0.serialize(serializer)
-//     }
-// }
+pub struct DBson<T> {
+    inner: T,
+}
 
 impl<T> From<T> for DBson<T> {
     fn from(inner: T) -> Self {
-        Self(inner)
+        Self { inner }
     }
 }
 
 impl<T> DBson<T> {
     pub fn new(inner: T) -> Self {
-        Self(inner)
+        Self { inner }
     }
 
     pub fn into_inner(self) -> T {
-        self.0
+        self.inner
     }
 }
 
@@ -56,7 +71,7 @@ mod impl_rusqlite {
     use rusqlite::{types::FromSql, ToSql};
     impl<T: serde::Serialize> ToSql for super::DBson<T> {
         fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-            let bytes = bson::to_vec(&self.0)
+            let bytes = bson::to_vec(&self)
                 .map_err(|e| rusqlite::Error::ToSqlConversionFailure(e.into()))?;
             Ok(rusqlite::types::ToSqlOutput::Owned(
                 rusqlite::types::Value::Blob(bytes),
@@ -71,7 +86,7 @@ mod impl_rusqlite {
             let bytes = value.as_blob()?;
             let inner = bson::from_slice(bytes)
                 .map_err(|e| rusqlite::types::FromSqlError::Other(Box::new(e)))?;
-            Ok(Self::new(inner))
+            Ok(inner)
         }
     }
 }
@@ -106,7 +121,7 @@ mod impl_sqlx {
             &self,
             buf: &mut <DB as HasArguments<'a>>::ArgumentBuffer,
         ) -> sqlx::encode::IsNull {
-            let Ok(bytes) = bson::to_vec(&self.inner) else {
+            let Ok(bytes) = bson::to_vec(&self) else {
                 return sqlx::encode::IsNull::Yes;
             };
             <Vec<u8> as Encode<'a, DB>>::encode_by_ref(&bytes, buf)
@@ -115,7 +130,7 @@ mod impl_sqlx {
             self,
             buf: &mut <DB as HasArguments<'a>>::ArgumentBuffer,
         ) -> sqlx::encode::IsNull {
-            let Ok(bytes) = bson::to_vec(&self.inner) else {
+            let Ok(bytes) = bson::to_vec(&self) else {
                 return sqlx::encode::IsNull::Yes;
             };
             <Vec<u8> as Encode<'a, DB>>::encode(bytes, buf)

@@ -19,3 +19,13 @@ rusqlite = { version = "0.29.0", default-features = false, optional = true }
 [features]
 rusqlite = ["dep:rusqlite"]
 sqlx = ["dep:sqlx"]
+transparent = []
+
+[dev-dependencies]
+dbson = { workspace = true, features = ["rusqlite"] }
+rusqlite = { version = "0.29.0", features = ["bundled-full"] }
+
+[[test]]
+name = "unit_tests"
+path = "tests.rs"
+
