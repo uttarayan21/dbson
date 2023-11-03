@@ -94,6 +94,8 @@ mod impl_rusqlite {
 #[cfg(feature = "sqlx")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sqlx")))]
 mod impl_sqlx {
+    use super::DBson;
+    use serde::Serialize;
     use sqlx::{
         database::{HasArguments, HasValueRef},
         decode::Decode,
