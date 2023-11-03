@@ -150,7 +150,7 @@ mod impl_sqlx {
         ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
             let bytes = <&[u8] as Decode<'r, DB>>::decode(value)?;
             let inner = bson::from_slice(&bytes)?;
-            Ok(Self { inner })
+            Ok(inner)
         }
     }
 }
